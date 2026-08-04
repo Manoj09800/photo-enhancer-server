@@ -1,1 +1,0 @@
-This file was replaced by requirements.txt. Please use requirements.txt instead.
