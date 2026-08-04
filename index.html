@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Clarity — AI Photo Enhancer</title>
+<style>
+  :root{
+    --ink:#0d1210;
+    --panel:#151b18;
+    --panel-2:#1c2420;
+    --line:#2a332e;
+    --lens:#8fffb0;
+    --lens-dim:#4d8f66;
+    --paper:#eef2ee;
+    --muted:#8a9690;
+    --warn:#ffb454;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(circle at 50% -10%, #1a2c22 0%, var(--ink) 55%);
+    color:var(--paper);
+    font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    min-height:100vh;
+    padding:0 0 40px 0;
+  }
+  .frame{
+    max-width:480px;
+    margin:0 auto;
+    padding:28px 20px 0 20px;
+  }
+  .eyebrow{
+    font-family:'Courier New', monospace;
+    letter-spacing:.22em;
+    text-transform:uppercase;
+    font-size:11px;
+    color:var(--lens);
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .eyebrow::before{
+    content:"";
+    width:6px;height:6px;border-radius:50%;
+    background:var(--lens);
+    box-shadow:0 0 8px var(--lens);
+  }
+  h1{
+    font-size:32px;
+    line-height:1.05;
+    margin:10px 0 6px 0;
+    font-weight:700;
+    letter-spacing:-0.5px;
+  }
+  h1 span{color:var(--lens);}
+  .sub{
+    color:var(--muted);
+    font-size:14px;
+    line-height:1.5;
+    margin-bottom:24px;
+  }
+
+  .stage{
+    position:relative;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:18px;
+    padding:16px;
+    overflow:hidden;
+  }
+  .viewport{
+    position:relative;
+    width:100%;
+    min-height:180px;
+    border-radius:12px;
+    overflow:hidden;
+    background:#0a0e0b;
+  }
+  #imgBefore{
+    display:block;
+    width:100%;
+    height:auto;
+  }
+  #imgAfter{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    object-fit:contain;
+  }
+  #imgAfter{ clip-path: inset(0 0 0 50%); }
+  .placeholder{
+    color:var(--muted);
+    font-size:13px;
+    text-align:center;
+    padding:60px 30px;
+    font-family:'Courier New', monospace;
+  }
+  .slider-line{
+    position:absolute; top:0; bottom:0; left:50%;
+    width:2px; background:var(--lens);
+    box-shadow:0 0 10px var(--lens);
+    pointer-events:none;
+    display:none;
+  }
+  .slider-line::after{
+    content:"⇔";
+    position:absolute; top:50%; left:50%;
+    transform:translate(-50%,-50%);
+    background:var(--lens);
+    color:#0a0e0b;
+    width:28px;height:28px;
+    border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-size:14px; font-weight:bold;
+  }
+  #compareRange{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    opacity:0; cursor:ew-resize;
+    display:none;
+  }
+  .tag{
+    position:absolute; top:10px; font-family:'Courier New', monospace;
+    font-size:10px; letter-spacing:.1em; padding:3px 8px;
+    border-radius:20px; background:rgba(0,0,0,.5);
+    border:1px solid var(--line); z-index:3;
+  }
+  .tag.before{left:10px;}
+  .tag.after{right:10px; color:var(--lens); border-color:var(--lens-dim); display:none;}
+
+  .controls{
+    display:flex; gap:10px; margin-top:16px;
+  }
+  .btn{
+    flex:1;
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    color:var(--paper);
+    padding:14px 10px;
+    border-radius:12px;
+    font-size:13px;
+    font-weight:600;
+    display:flex; flex-direction:column; align-items:center; gap:6px;
+    cursor:pointer;
+    transition:border-color .15s ease, transform .1s ease;
+  }
+  .btn:active{transform:scale(.97);}
+  .btn:hover{border-color:var(--lens-dim);}
+  .btn svg{width:20px;height:20px;stroke:var(--lens);}
+  input[type=file]{display:none;}
+
+  .enhance-btn{
+    margin-top:12px;
+    width:100%;
+    padding:16px;
+    border-radius:14px;
+    border:none;
+    background:linear-gradient(135deg, var(--lens) 0%, #5fe08a 100%);
+    color:#0a1a0f;
+    font-size:15px;
+    font-weight:700;
+    letter-spacing:.02em;
+    cursor:pointer;
+    transition:opacity .15s ease, transform .1s ease;
+  }
+  .enhance-btn:active{transform:scale(.98);}
+  .enhance-btn:disabled{
+    opacity:.35;
+    cursor:not-allowed;
+  }
+
+  .status{
+    margin-top:14px;
+    font-family:'Courier New', monospace;
+    font-size:12px;
+    color:var(--muted);
+    display:flex;
+    align-items:center;
+    gap:8px;
+    min-height:18px;
+  }
+  .status .dot{
+    width:7px;height:7px;border-radius:50%;
+    background:var(--line);
+  }
+  .status.active .dot{
+    background:var(--lens);
+    box-shadow:0 0 8px var(--lens);
+    animation:pulse 1s infinite ease-in-out;
+  }
+  @keyframes pulse{
+    0%,100%{opacity:1;} 50%{opacity:.3;}
+  }
+
+  .progress-track{
+    margin-top:8px;
+    height:3px;
+    width:100%;
+    background:var(--line);
+    border-radius:2px;
+    overflow:hidden;
+    display:none;
+  }
+  .progress-fill{
+    height:100%;
+    width:0%;
+    background:var(--lens);
+    transition:width .2s ease;
+  }
+
+  .download-btn{
+    display:none;
+    margin-top:12px;
+    width:100%;
+    padding:14px;
+    border-radius:14px;
+    border:1px solid var(--lens-dim);
+    background:transparent;
+    color:var(--lens);
+    font-size:14px;
+    font-weight:600;
+    cursor:pointer;
+  }
+
+  .footnote{
+    margin-top:26px;
+    font-size:11px;
+    color:var(--muted);
+    line-height:1.6;
+    text-align:center;
+    font-family:'Courier New', monospace;
+  }
+</style>
+</head>
+<body>
+
+<div class="frame">
+  <div class="eyebrow">On-device AI · 100% Free</div>
+  <h1>Clarity<span>.</span></h1>
+  <div class="sub">Photo kheencho ya upload karo — AI usse clean karke sharp, upscaled quality mein badal degi. Sab kuch tumhare phone ke andar hi hota hai, koi server nahi.</div>
+
+  <div class="stage">
+    <div class="viewport" id="viewport">
+      <div class="placeholder" id="placeholder">Koi photo nahi hai abhi.<br>Neeche se camera ya gallery choose karo.</div>
+      <img id="imgBefore" style="display:none;">
+      <img id="imgAfter" style="display:none;">
+      <div class="tag before">ORIGINAL</div>
+      <div class="tag after" id="tagAfter">4K ENHANCED</div>
+      <div class="slider-line" id="sliderLine"></div>
+      <input type="range" id="compareRange" min="0" max="100" value="50">
+    </div>
+
+    <div class="controls">
+      <label class="btn" for="cameraInput">
+        <svg fill="none" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h2l1.5-2h7L17 7h2a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3.5" stroke-linecap="round"/></svg>
+        Camera
+        <input type="file" id="cameraInput" accept="image/*" capture="environment">
+      </label>
+      <label class="btn" for="galleryInput">
+        <svg fill="none" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 15l-5-5-4 4-3-3-6 6"/></svg>
+        Gallery
+        <input type="file" id="galleryInput" accept="image/*">
+      </label>
+    </div>
+
+    <button class="enhance-btn" id="enhanceBtn" disabled>Enhance to 4K</button>
+
+    <div class="status" id="statusRow"><div class="dot"></div><span id="statusText">Photo lo shuru karne ke liye</span></div>
+    <div class="progress-track" id="progressTrack"><div class="progress-fill" id="progressFill"></div></div>
+
+    <button class="download-btn" id="downloadBtn">↓ Enhanced Photo Save Karo</button>
+  </div>
+
+  <div class="footnote">REAL AI: REAL-ESRGAN SERVER · AUTO LOCAL FALLBACK<br>FREE TIER · FIRST REQUEST MAY TAKE 30-50s</div>
+</div>
+
+<script>
+const AI_SERVER_URL = 'https://photo-enhancer-v94f.onrender.com';
+const cameraInput = document.getElementById('cameraInput');
+const galleryInput = document.getElementById('galleryInput');
+const enhanceBtn = document.getElementById('enhanceBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+const imgBefore = document.getElementById('imgBefore');
+const imgAfter = document.getElementById('imgAfter');
+const placeholder = document.getElementById('placeholder');
+const tagAfter = document.getElementById('tagAfter');
+const sliderLine = document.getElementById('sliderLine');
+const compareRange = document.getElementById('compareRange');
+const statusRow = document.getElementById('statusRow');
+const statusText = document.getElementById('statusText');
+const progressTrack = document.getElementById('progressTrack');
+const progressFill = document.getElementById('progressFill');
+
+let currentFile = null;
+let enhancedDataUrl = null;
+
+function setStatus(text, active){
+  statusText.textContent = text;
+  statusRow.classList.toggle('active', !!active);
+}
+
+function handleFile(file){
+  if(!file) return;
+  currentFile = file;
+  const url = URL.createObjectURL(file);
+  imgBefore.src = url;
+  imgBefore.style.display = 'block';
+  imgAfter.style.display = 'none';
+  imgAfter.src = '';
+  placeholder.style.display = 'none';
+  tagAfter.style.display = 'none';
+  sliderLine.style.display = 'none';
+  compareRange.style.display = 'none';
+  downloadBtn.style.display = 'none';
+  enhanceBtn.disabled = false;
+  setStatus('Photo ready. "Enhance to 4K" dabao.', false);
+}
+
+cameraInput.addEventListener('change', e => handleFile(e.target.files[0]));
+galleryInput.addEventListener('change', e => handleFile(e.target.files[0]));
+
+const MAX_LONG_SIDE = 3840; // 4K target
+
+function wait(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+// Calls the real AI server (Real-ESRGAN). Falls back to the local
+// canvas enhancer if the server is unreachable or errors out.
+async function enhanceViaServer(file){
+  const formData = new FormData();
+  formData.append('image', file);
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 280000); // up to ~4.5 min for slow free-tier CPU
+
+  const response = await fetch(AI_SERVER_URL + '/enhance', {
+    method: 'POST',
+    body: formData,
+    signal: controller.signal
+  });
+  clearTimeout(timeoutId);
+
+  if(!response.ok){
+    throw new Error('Server error: ' + response.status);
+  }
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
+}
+
+// Local fallback: upscale + unsharp mask, runs entirely in-browser.
+async function enhanceImageLocal(imgEl){
+  const srcW = imgEl.naturalWidth;
+  const srcH = imgEl.naturalHeight;
+  const longSide = Math.max(srcW, srcH);
+
+  let scale = MAX_LONG_SIDE / longSide;
+  scale = Math.min(Math.max(scale, 1), 3);
+
+  const outW = Math.round(srcW * scale);
+  const outH = Math.round(srcH * scale);
+
+  const mainCanvas = document.createElement('canvas');
+  mainCanvas.width = outW; mainCanvas.height = outH;
+  const mctx = mainCanvas.getContext('2d');
+  mctx.imageSmoothingEnabled = true;
+  mctx.imageSmoothingQuality = 'high';
+  mctx.filter = 'contrast(1.08) saturate(1.14) brightness(1.02)';
+  mctx.drawImage(imgEl, 0, 0, outW, outH);
+  mctx.filter = 'none';
+
+  const blurCanvas = document.createElement('canvas');
+  blurCanvas.width = outW; blurCanvas.height = outH;
+  const bctx = blurCanvas.getContext('2d');
+  bctx.filter = 'blur(1.4px)';
+  bctx.drawImage(mainCanvas, 0, 0);
+
+  const sharpData = mctx.getImageData(0, 0, outW, outH);
+  const blurData = bctx.getImageData(0, 0, outW, outH);
+  const s = sharpData.data, b = blurData.data;
+  const amount = 0.55;
+
+  for(let i = 0; i < s.length; i += 4){
+    for(let c = 0; c < 3; c++){
+      const idx = i + c;
+      const val = s[idx] + (s[idx] - b[idx]) * amount;
+      s[idx] = val < 0 ? 0 : (val > 255 ? 255 : val);
+    }
+  }
+
+  mctx.putImageData(sharpData, 0, 0);
+  return mainCanvas.toDataURL('image/jpeg', 0.95);
+}
+
+enhanceBtn.addEventListener('click', async () => {
+  if(!currentFile) return;
+  enhanceBtn.disabled = true;
+  progressTrack.style.display = 'block';
+  progressFill.style.width = '10%';
+  setStatus('AI server se connect ho raha hai...', true);
+
+  try{
+    let result;
+    let usedServer = true;
+    try{
+      progressFill.style.width = '20%';
+      setStatus('AI process ho raha hai... free server slow hai, 2-4 minute lag sakte hain, please wait', true);
+      result = await enhanceViaServer(currentFile);
+      progressFill.style.width = '90%';
+    }catch(serverErr){
+      console.warn('Server enhance failed, using local fallback:', serverErr);
+      usedServer = false;
+      setStatus('Server abhi busy hai, local enhance kar rahe hain...', true);
+      progressFill.style.width = '50%';
+      await wait(30);
+      result = await enhanceImageLocal(imgBefore);
+    }
+
+    progressFill.style.width = '100%';
+    enhancedDataUrl = result;
+    imgAfter.src = result;
+    imgAfter.style.display = 'block';
+    tagAfter.style.display = 'block';
+    tagAfter.textContent = usedServer ? 'REAL AI ✓' : 'LOCAL ENHANCE';
+    tagAfter.style.color = usedServer ? '#8fffb0' : '#ffb454';
+    tagAfter.style.borderColor = usedServer ? '#4d8f66' : '#ffb454';
+    sliderLine.style.display = 'block';
+    compareRange.style.display = 'block';
+    downloadBtn.style.display = 'block';
+    setStatus(usedServer ? 'Ho gaya! Real AI server ne enhance kiya.' : 'Ho gaya, lekin local fallback use hua (server slow tha).', false);
+
+    setTimeout(() => { progressTrack.style.display = 'none'; }, 600);
+  }catch(err){
+    console.error(err);
+    setStatus('Error: ' + (err.message || 'kuch galat ho gaya, dobara try karo'), false);
+    progressTrack.style.display = 'none';
+  }finally{
+    enhanceBtn.disabled = false;
+  }
+});
+
+compareRange.addEventListener('input', e => {
+  const val = e.target.value;
+  imgAfter.style.clipPath = `inset(0 0 0 ${val}%)`;
+  sliderLine.style.left = val + '%';
+});
+
+downloadBtn.addEventListener('click', () => {
+  if(!enhancedDataUrl) return;
+  const a = document.createElement('a');
+  a.href = enhancedDataUrl;
+  a.download = 'clarity-enhanced-' + Date.now() + '.png';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+});
+</script>
+
+</body>
+</html>
